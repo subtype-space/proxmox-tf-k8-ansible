@@ -1,0 +1,9 @@
+- name: Get join command
+  debug:
+    msg: "{{ lookup('file', '/tmp/join_command.txt') }}"
+  register: join_command
+
+- name: Execute join command
+  shell: "{{ join_command.msg }}"
+  register: join_task
+  failed_when: "join_task.rc != 0 and 'already exists' not in join_task.stderr"

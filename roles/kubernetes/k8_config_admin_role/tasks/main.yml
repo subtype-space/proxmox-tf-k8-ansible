@@ -1,0 +1,55 @@
+- name: Initialize Kubernetes Cluster (this may take a while)
+  shell: kubeadm init --pod-network-cidr={{ pod_cidr }}
+  register: kubeadm_init
+  args:
+    creates: /etc/kubernetes/admin.conf #don't init again if this config already exists!
+
+- name: Show kubeadm init
+  debug:
+    var: kubeadm_init
+
+# Reminder, this is done as root
+- name: Configure kubectl (1/2)
+  file:
+    path: ~/.kube
+    state: directory
+
+- name: Configure kubectl (2/2)
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: ~/.kube/config
+    remote_src: true
+
+- name: Create Calico operator
+  shell: kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml
+  register: calico_create
+  failed_when: "calico_create.rc != 0 and 'already exists' not in calico_create.stderr"
+
+# Templated from https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/custom-resources.yaml
+- name: Template default Calico configuration (v3.26.1)
+  template:
+    src: calico-config.yaml.j2
+    dest: /etc/kubernetes/calico-config.yaml
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install Calico
+  shell: kubectl create -f /etc/kubernetes/calico-config.yaml
+  register: calico_install
+  failed_when: "calico_install.rc !=0 and 'already exists' not in calico_install.stderr"
+
+- name: Remove taints on control plane
+  shell: kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+  register: remove_taint
+  failed_when: "remove_taint.rc != 0 and 'untainted' not in remove_taint.stdout"
+
+- name: Get join command
+  shell: kubeadm token create --print-join-command
+  register: join
+
+- name: Store join command
+  local_action:
+    module: copy
+    content: "{{ join.stdout }}"
+    dest: '/tmp/join_command.txt'

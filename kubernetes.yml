@@ -1,0 +1,27 @@
+- hosts: k8admin:k8worker
+  become: true
+  roles:
+    - role: kubernetes/kubernetes_install_role
+  tags:
+    - install-all
+      
+- hosts: k8admin
+  become: true
+  roles:
+    - role: kubernetes/k8_config_admin_role
+  tags:
+    - config-admin
+
+- hosts: k8worker
+  become: true
+  roles:
+    - role: kubernetes/k8_config_workers_role
+  tags:
+    - config-worker
+
+# TODO: make this selectable, default to Traefik
+- hosts: k8admin
+  become: true
+  roles: 
+    - role: kubernetes/traefik_ingress
+

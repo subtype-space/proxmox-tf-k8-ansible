@@ -1,0 +1,40 @@
+- name: Create traefik folder
+  file:
+    path: /etc/kubernetes/traefik
+    owner: root
+    group: root
+    state: directory
+
+- name: Copy Traefik Service Account Role
+  copy:
+    src: 00-role.yml
+    dest: /etc/kubernetes/traefik/00-role.yml
+
+- name: Copy Traefik Service Account
+  copy:
+    src: 00-account.yml
+    dest: /etc/kubernetes/traefik/00-account.yml
+
+- name: Copy Traefik role binding
+  copy:
+    src: 01-role-binding.yml
+    dest: /etc/kubernetes/traefik/01-role-binding.yml
+
+- name: Copy Traefik Deployment resource
+  copy:
+    src: 02-traefik.yml
+    dest: /etc/kubernetes/traefik/02-traefik.yml
+
+- name: Copy Traefik services
+  copy:
+    src: 02-traefik-services.yml
+    dest: /etc/kubernetes/traefik/02-traefik-services.yml
+
+- name: Apply Traefik deployment (this may take a while)
+  shell: |
+    kubectl apply -f /etc/kubernetes/traefik/00-role.yml \
+      -f /etc/kubernetes/traefik/00-account.yml \
+      -f /etc/kubernetes/traefik/01-role-binding.yml \
+      -f /etc/kubernetes/traefik/02-traefik.yml \ 
+      -f /etc/kubernetes/traefik/02-traefik-services.yml
+  

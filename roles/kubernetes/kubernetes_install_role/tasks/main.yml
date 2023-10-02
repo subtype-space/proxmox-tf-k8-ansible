@@ -1,0 +1,104 @@
+- name: Run update and install packages
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Ensure keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: 0775
+
+- name: Add apt signing key for Docker
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+## TO DO - AUTO TARGET OS-BASED REPOSITORY
+- name: Add apt repository (lunar)
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu lunar stable
+    state: present
+
+- name: Install docker
+  apt:
+    name:
+      - containerd.io
+      - docker-ce
+    state: present
+    update_cache: yes
+
+- name: Start docker service and make sure it's enabled
+  systemd:  
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Load default containerd config
+  become: true
+  shell: "containerd config default > /etc/containerd/config.toml"
+
+- name: Update SystemdCgroup on containerd config
+  lineinfile:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup'
+    line: '            SystemdCgroup = true'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Restart containerd
+  systemd:
+    name: containerd
+    state: restarted
+
+# https://dl.k8s.io/apt/doc/apt-key.gpg is a backup apt-key if you're seeing issues with no public key
+- name: Add apt signing key for kubernetes
+  apt_key:
+    url: https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key
+    state: present
+
+- name: Add apt repository to system
+  apt_repository:
+    repo: deb https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /
+    state: present
+    filename: /etc/apt/sources.list.d/kubernetes.list
+
+- name: Install Kubernetes tools
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes
+  register: kubernetes_install_trigger
+
+- name: Ensure kubelet is started and enabled at boot
+  systemd:
+    name: kubelet
+    state: started
+    enabled: true
+
+- name: Hold Kubernetes packages at version we grabbed
+  dpkg_selections:
+    name: "{{ item }}" # dpkg_selections does NOT take an array/list
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Disable swap for performance
+  shell: swapoff -a
+  when: kubernetes_install_trigger.changed
+
+- name: Remove swap from fstab for performance
+  mount:
+    path: swap
+    state: absent
